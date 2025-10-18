@@ -5,6 +5,6 @@ services:
     container_name: bambu-timelapse-downloader
     restart: unless-stopped
     env_file:
-      - .env
+      - stack.env
     volumes:
       - ./downloads:/downloads

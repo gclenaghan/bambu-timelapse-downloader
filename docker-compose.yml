@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  bambu-timelapse-downloader:
+    build: .
+    container_name: bambu-timelapse-downloader
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./downloads:/downloads

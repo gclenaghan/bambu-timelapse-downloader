@@ -24,13 +24,13 @@ except KeyError as e:
     exit(1)
 
 # --- MQTT Functions ---
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, reason_code, properties):
     """Callback for when the client connects to the MQTT broker."""
-    if rc == 0:
+    if reason_code == 0:
         print("Connected to MQTT Broker!")
         client.subscribe(MQTT_TOPIC)
     else:
-        print(f"Failed to connect, return code {rc}\n")
+        print(f"Failed to connect, return code {reason_code}\n")
 
 def on_message(client, userdata, msg):
     """Callback for when a message is received from the MQTT broker."""

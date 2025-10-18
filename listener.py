@@ -71,7 +71,7 @@ if __name__ == "__main__":
         os.makedirs(DOWNLOAD_DIR)
 
     # Set up MQTT client
-    client = mqtt.Client()
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     client.on_connect = on_connect
     client.on_message = on_message

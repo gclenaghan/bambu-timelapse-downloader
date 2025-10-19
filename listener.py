@@ -3,6 +3,36 @@ import ftplib
 import paho.mqtt.client as mqtt
 import json
 import ssl
+import socket
+
+class ImplicitFTP_TLS(ftplib.FTP):
+    """A subclass of FTP that connects over an SSL-encrypted socket."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.port = 990
+
+    def connect(self, host='', port=0, timeout=-1, source_address=None):
+        if host != '':
+            self.host = host
+        if port != 0:
+            self.port = port
+        if timeout != -1:
+            self.timeout = timeout
+        if source_address is not None:
+            self.source_address = source_address
+
+        self.sock = socket.create_connection((self.host, self.port), self.timeout,
+                                             source_address=self.source_address)
+        self.af = self.sock.family
+        
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        
+        self.sock = context.wrap_socket(self.sock, server_hostname=self.host)
+        self.file = self.sock.makefile('r', encoding=self.encoding)
+        self.welcome = self.getresp()
+        return self.welcome
 
 # --- Configuration ---
 try:
@@ -44,9 +74,8 @@ def on_message(client, userdata, msg):
 def download_files():
     """Connects to the FTPS server and downloads all files from the remote directory."""
     try:
-        with ftplib.FTP_TLS(PRINTER_IP) as ftp:
+        with ImplicitFTP_TLS(PRINTER_IP, timeout=10) as ftp:
             ftp.login("bblp", ACCESS_CODE)
-            ftp.prot_p()
             ftp.cwd("timelapse")
 
             filenames = ftp.nlst()

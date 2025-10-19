@@ -32,6 +32,7 @@ try:
     ACCESS_CODE = os.environ["ACCESS_CODE"]
     SERIAL_NUMBER = os.environ["SERIAL_NUMBER"]
     DOWNLOAD_DIR = "/downloads"
+    DELETE_AFTER_DOWNLOAD = os.environ.get("DELETE_AFTER_DOWNLOAD", "false").lower() in ("true", "1", "t")
 except KeyError as e:
     print(f"Error: Environment variable {e} is not set. Please set it and restart the script.")
     exit(1)
@@ -67,10 +68,10 @@ def download_files():
     """Connects to the FTPS server and downloads all files from the remote directory."""
     try:
         with ImplicitFTP_TLS() as ftp:
-            print(ftp.connect(PRINTER_IP, port=990))
-            print(ftp.login("bblp", ACCESS_CODE))
-            print(ftp.prot_p())
-            print(ftp.cwd("timelapse"))
+            print("Connecting: ", ftp.connect(PRINTER_IP, port=990))
+            print("Logging in: ", ftp.login("bblp", ACCESS_CODE))
+            print("Securing connection: ", ftp.prot_p())
+            print("Opening timelapse directory: ", ftp.cwd("timelapse"))
 
             filenames = [filename for filename in ftp.nlst() if filename.endswith(".avi")]
             print(f"Found {len(filenames)} files to download.")
@@ -81,6 +82,14 @@ def download_files():
                     print(f"Downloading {filename}...")
                     ftp.retrbinary(f"RETR {filename}", f.write)
                 print(f"Downloaded {filename} to {local_filepath}")
+
+                if DELETE_AFTER_DOWNLOAD:
+                    try:
+                        print(f"Deleting {filename} from the printer...")
+                        ftp.delete(filename)
+                        print(f"Deleted {filename} from the printer.")
+                    except Exception as e:
+                        print(f"An error occurred while deleting {filename}: {e}")
 
             print("All files downloaded successfully.")
 

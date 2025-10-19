@@ -6,4 +6,4 @@ services:
     env_file:
       - stack.env
     volumes:
-      - ./downloads:/downloads
+      - ${DOWNLOADS_HOST_PATH}:/downloads

@@ -42,10 +42,11 @@ def on_message(client, userdata, msg):
 
 # --- FTP Functions ---
 def download_files():
-    """Connects to the FTP server and downloads all files from the remote directory."""
+    """Connects to the FTPS server and downloads all files from the remote directory."""
     try:
-        with ftplib.FTP(PRINTER_IP) as ftp:
+        with ftplib.FTP_TLS(PRINTER_IP) as ftp:
             ftp.login("bblp", ACCESS_CODE)
+            ftp.prot_p()
             ftp.cwd("timelapse")
 
             filenames = ftp.nlst()
@@ -61,7 +62,7 @@ def download_files():
             print("All files downloaded successfully.")
 
     except Exception as e:
-        print(f"An error occurred during the FTP process: {e}")
+        print(f"An error occurred during the FTPS process: {e}")
 
 # --- Main ---
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ import ssl
 try:
     PRINTER_IP = os.environ["PRINTER_IP"]
     ACCESS_CODE = os.environ["ACCESS_CODE"]
-    SERIAL_NUMBER os.environ["SERIAL_NUMBER"]
+    SERIAL_NUMBER = os.environ["SERIAL_NUMBER"]
     DOWNLOAD_DIR = "/downloads"
 except KeyError as e:
     print(f"Error: Environment variable {e} is not set. Please set it and restart the script.")

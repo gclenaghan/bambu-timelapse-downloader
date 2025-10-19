@@ -3,36 +3,28 @@ import ftplib
 import paho.mqtt.client as mqtt
 import json
 import ssl
-import socket
 
-class ImplicitFTP_TLS(ftplib.FTP):
-    """A subclass of FTP that connects over an SSL-encrypted socket."""
+class ImplicitFTP_TLS(ftplib.FTP_TLS):
+    """
+    FTP_TLS subclass that automatically wraps sockets in SSL to support implicit FTPS.
+    From https://stackoverflow.com/a/36049814
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.port = 990
+        self._sock = None
 
-    def connect(self, host='', port=0, timeout=-1, source_address=None):
-        if host != '':
-            self.host = host
-        if port != 0:
-            self.port = port
-        if timeout != -1:
-            self.timeout = timeout
-        if source_address is not None:
-            self.source_address = source_address
+    @property
+    def sock(self):
+        """Return the socket."""
+        return self._sock
 
-        self.sock = socket.create_connection((self.host, self.port), self.timeout,
-                                             source_address=self.source_address)
-        self.af = self.sock.family
-        
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        
-        self.sock = context.wrap_socket(self.sock, server_hostname=self.host)
-        self.file = self.sock.makefile('r', encoding=self.encoding)
-        self.welcome = self.getresp()
-        return self.welcome
+    @sock.setter
+    def sock(self, value):
+        """When modifying the socket, ensure that it is ssl wrapped."""
+        if value is not None and not isinstance(value, ssl.SSLSocket):
+            value = self.context.wrap_socket(value)
+        self._sock = value
 
 # --- Configuration ---
 try:
@@ -74,11 +66,12 @@ def on_message(client, userdata, msg):
 def download_files():
     """Connects to the FTPS server and downloads all files from the remote directory."""
     try:
-        with ImplicitFTP_TLS(PRINTER_IP, timeout=10) as ftp:
+        with ImplicitFTP_TLS() as ftp:
+            ftp.connect(PRINTER_IP, port=990)
             ftp.login("bblp", ACCESS_CODE)
             ftp.cwd("timelapse")
 
-            filenames = ftp.nlst()
+            filenames = [filename for filename in ftp.nlst() if filename.endswith(".avi")]
             print(f"Found {len(filenames)} files to download.")
 
             for filename in filenames:

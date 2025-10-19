@@ -1,23 +1,14 @@
-
 import os
 import ftplib
 import paho.mqtt.client as mqtt
+import json
+import ssl
 
 # --- Configuration ---
 try:
-    # MQTT Configuration
-    MQTT_BROKER_ADDRESS = os.environ["MQTT_BROKER_ADDRESS"]
-    MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
-    MQTT_USERNAME = os.environ["MQTT_USERNAME"]
-    MQTT_PASSWORD = os.environ["MQTT_PASSWORD"]
-    MQTT_TOPIC = os.environ["MQTT_TOPIC"]
-
-    # FTPS Configuration
-    FTPS_HOST = os.environ["PRINTER_IP"]
-    FTPS_PORT = int(os.environ.get("FTPS_PORT", 21))
-    FTPS_USERNAME = os.environ.get("FTPS_USERNAME", "bblp")
-    FTPS_PASSWORD = os.environ["ACCESS_CODE"]
-    FTPS_REMOTE_DIR = os.environ.get("FTPS_REMOTE_DIR", "timelapse")
+    PRINTER_IP = os.environ["PRINTER_IP"]
+    ACCESS_CODE = os.environ["ACCESS_CODE"]
+    SERIAL_NUMBER os.environ["SERIAL_NUMBER"]
     DOWNLOAD_DIR = "/downloads"
 except KeyError as e:
     print(f"Error: Environment variable {e} is not set. Please set it and restart the script.")
@@ -28,41 +19,49 @@ def on_connect(client, userdata, flags, reason_code, properties):
     """Callback for when the client connects to the MQTT broker."""
     if reason_code == 0:
         print("Connected to MQTT Broker!")
-        client.subscribe(MQTT_TOPIC)
+        client.subscribe(f"device/{SERIAL_NUMBER}/report")
     else:
         print(f"Failed to connect, return code {reason_code}\n")
 
 def on_message(client, userdata, msg):
     """Callback for when a message is received from the MQTT broker."""
-    print(f"Message received on topic {msg.topic}: {msg.payload.decode()}")
-    if msg.payload.decode() == "DOWNLOAD":
-        print("Download command received. Starting download...")
-        download_files()
-
-# --- FTPS Functions ---
-def download_files():
-    """Connects to the FTPS server and downloads all files from the remote directory."""
     try:
-        with ftplib.FTP_TLS() as ftps:
-            ftps.connect(FTPS_HOST, FTPS_PORT)
-            ftps.login(FTPS_USERNAME, FTPS_PASSWORD)
-            ftps.prot_p()  # Switch to data protection mode
-            ftps.cwd(FTPS_REMOTE_DIR)
+        data = json.loads(msg.payload.decode())
+        if "print" in data and "gcode_state" in data["print"]:
+            gcode_state = data["print"]["gcode_state"]
+            if gcode_state in ["FINISH", "FAILED"]:
+                print(f"Print ended with status {gcode_state}. Starting timelapse download...")
+                download_files()
+            else:
+                print(f"Current gcode_state: {gcode_state}")
+    except json.JSONDecodeError:
+        print(f"Received non-JSON message: {msg.payload.decode()}")
+    except Exception as e:
+        print(f"An error occurred in on_message: {e}")
 
-            filenames = ftps.nlst()
+
+# --- FTP Functions ---
+def download_files():
+    """Connects to the FTP server and downloads all files from the remote directory."""
+    try:
+        with ftplib.FTP(PRINTER_IP) as ftp:
+            ftp.login("bblp", ACCESS_CODE)
+            ftp.cwd("timelapse")
+
+            filenames = ftp.nlst()
             print(f"Found {len(filenames)} files to download.")
 
             for filename in filenames:
                 local_filepath = os.path.join(DOWNLOAD_DIR, filename)
                 with open(local_filepath, "wb") as f:
                     print(f"Downloading {filename}...")
-                    ftps.retrbinary(f"RETR {filename}", f.write)
+                    ftp.retrbinary(f"RETR {filename}", f.write)
                 print(f"Downloaded {filename} to {local_filepath}")
 
             print("All files downloaded successfully.")
 
     except Exception as e:
-        print(f"An error occurred during the FTPS process: {e}")
+        print(f"An error occurred during the FTP process: {e}")
 
 # --- Main ---
 if __name__ == "__main__":
@@ -72,12 +71,14 @@ if __name__ == "__main__":
 
     # Set up MQTT client
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    client.username_pw_set("bblp", ACCESS_CODE)
+    client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
     client.on_connect = on_connect
     client.on_message = on_message
 
     # Connect to the MQTT broker
-    client.connect(MQTT_BROKER_ADDRESS, MQTT_PORT, 60)
+    client.connect(PRINTER_IP, 8883, 60)
 
     # Start the MQTT loop
     client.loop_forever()

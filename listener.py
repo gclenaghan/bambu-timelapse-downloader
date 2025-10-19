@@ -67,9 +67,10 @@ def download_files():
     """Connects to the FTPS server and downloads all files from the remote directory."""
     try:
         with ImplicitFTP_TLS() as ftp:
-            ftp.connect(PRINTER_IP, port=990)
-            ftp.login("bblp", ACCESS_CODE)
-            ftp.cwd("timelapse")
+            print(ftp.connect(PRINTER_IP, port=990))
+            print(ftp.login("bblp", ACCESS_CODE))
+            print(ftp.prot_p())
+            print(ftp.cwd("timelapse"))
 
             filenames = [filename for filename in ftp.nlst() if filename.endswith(".avi")]
             print(f"Found {len(filenames)} files to download.")

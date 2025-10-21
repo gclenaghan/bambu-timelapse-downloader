@@ -68,7 +68,10 @@ class MqttListener:
         try:
             data = json.loads(msg.payload.decode())
             if "print" in data and "gcode_state" in data["print"]:
+                logging.debug(f"Received message: {data}")
                 gcode_state = data["print"]["gcode_state"]
+                # We only care if the gcode_state changes to a final value, since we may get repeated messages
+                # later with the same state and only want to trigger once. We'll also trigger on the first message.
                 if (gcode_state != self.last_gcode_state) and (gcode_state in ["FINISH", "FAILED"]):
                     logging.info(f"gcode_state changed to {gcode_state}. Starting timelapse download...")
                     self.download_files()

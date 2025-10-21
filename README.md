@@ -2,7 +2,7 @@
 
 This script connects to a Bambu Lab printer via MQTT and automatically downloads timelapse videos when a print ends.
 
-The idea is that downloading from the printer using Bambu Studio/Handy takes a really long time. This starts the process as soon as the print finishes so hopefully by the time you are interested in viewing it its already available in a more convenient place.
+The idea is that downloading from the printer using Bambu Studio/Handy takes a really long time. This starts the process as soon as the print finishes so hopefully by the time you are interested in viewing it its already available in a more convenient place such as a NAS.
 
 Before writing this I found this prior art using Home Assistant and a script: https://www.reddit.com/r/BambuLab/comments/1hqhfjf/bambu_timelapse_downloader_cli/ which was a useful reference. This does not need home assistant since it subscribes directly to the printer's MQTT, and doesn't have the constraints of running as a script in HA.
 
@@ -11,9 +11,7 @@ Before writing this I found this prior art using Home Assistant and a script: ht
 This is mostly vibe-coded, so beware in general.
 I only own a P1S and have not tested this on anything else.
 
-The MQTT listener checks the gcode_status field for FINISH or FAILED which may be present in the device report even if it hasn't changed, so the download routine may trigger more often than you expect. When DELETE_AFTER_DOWNLOAD is enabled, this is fine since it just won't find anything if there isn't a new timelapse and exit.
-
-Deleting these from your device means they are no longer accessible through Bambu Studio or Bambu Handy. You'll have to put the downloads somewhere accessible (e.g. a NAS).
+Enabling deletion prevents the script from redownloading each time but means they are no longer accessible through Bambu Studio or Bambu Handy. You'll have to put the downloads somewhere accessible (e.g. a NAS).
 
 
 ## Configuration
@@ -43,3 +41,7 @@ This script is designed to be run with Docker Compose, Portainer, or similar.
 
 1. Create a stack and select Repository with this repo.
 2. Fill out the environment variables as described above.
+
+## Future Work
+* I'd be nice if the script intelligently checked which files exist in your download directory so it doesn't redownload even if you don't delete off the printer.
+* The filenames are what the printer gives them, which just has a timestamp. Ideally they'd be named better, for instance named after the gcode file, so they'd be easier to identify.

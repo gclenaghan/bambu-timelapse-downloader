@@ -3,6 +3,7 @@ import ftplib
 import paho.mqtt.client as mqtt
 import json
 import ssl
+import time
 import logging
 
 # --- Logging Configuration ---
@@ -73,7 +74,8 @@ class MqttListener:
                 # We only care if the gcode_state changes to a final value, since we may get repeated messages
                 # later with the same state and only want to trigger once. We'll also trigger on the first message.
                 if (gcode_state != self.last_gcode_state) and (gcode_state in ["FINISH", "FAILED"]):
-                    logging.info(f"gcode_state changed to {gcode_state}. Starting timelapse download...")
+                    logging.info(f"gcode_state changed to {gcode_state}. Will start download in 10 seconds...")
+                    time.sleep(10)  # Wait a bit to ensure the printer has finalized the files
                     self.download_files()
                 else:
                     logging.debug(f"Current gcode_state: {gcode_state}")

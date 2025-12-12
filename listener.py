@@ -103,10 +103,13 @@ class MqttListener:
 
                 for filename in filenames:
                     local_filepath = os.path.join(DOWNLOAD_DIR, filename)
-                    with open(local_filepath, "wb") as f:
-                        logging.info(f"Downloading {filename}...")
-                        ftp.retrbinary(f"RETR {filename}", f.write)
-                    logging.info(f"Downloaded {filename} to {local_filepath}")
+                    if os.path.exists(local_filepath):
+                        logging.info(f"Skipping {filename} as it already exists at {local_filepath}")
+                    else:
+                        with open(local_filepath, "wb") as f:
+                            logging.info(f"Downloading {filename}...")
+                            ftp.retrbinary(f"RETR {filename}", f.write)
+                        logging.info(f"Downloaded {filename} to {local_filepath}")
 
                     if DELETE_AFTER_DOWNLOAD:
                         try:

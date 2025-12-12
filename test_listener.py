@@ -90,7 +90,10 @@ class TestMqttListener(unittest.TestCase):
         mock_ftp_tls.return_value.__enter__.return_value = mock_ftp_instance
         mock_ftp_instance.nlst.return_value = ['video1.avi', 'video2.avi', 'other.txt']
 
-        listener_instance.download_files()
+        # Mock os.path.exists to return False so files are downloaded
+        with patch('os.path.exists') as mock_exists:
+            mock_exists.return_value = False
+            listener_instance.download_files()
 
         mock_ftp_instance.connect.assert_called_with('192.168.0.1', port=990)
         mock_ftp_instance.login.assert_called_with("bblp", "test_access_code")
@@ -105,6 +108,33 @@ class TestMqttListener(unittest.TestCase):
         mock_file.assert_any_call('/downloads/video2.avi', 'wb')
 
         mock_ftp_instance.delete.assert_not_called()
+
+    @patch('os.path.exists')
+    @patch('builtins.open', new_callable=mock_open)
+    @patch('listener.ImplicitFTP_TLS')
+    @patch('listener.mqtt.Client')
+    def test_download_files_skips_existing(self, mock_mqtt_client, mock_ftp_tls, mock_file, mock_exists):
+        """Test that existing files are skipped."""
+        listener_instance = listener.MqttListener()
+        mock_ftp_instance = MagicMock()
+        mock_ftp_tls.return_value.__enter__.return_value = mock_ftp_instance
+        mock_ftp_instance.nlst.return_value = ['video1.avi', 'video2.avi']
+
+        # Simulate video1.avi exists, video2.avi does not
+        def side_effect(path):
+            if path.endswith('video1.avi'):
+                return True
+            return False
+        mock_exists.side_effect = side_effect
+
+        listener_instance.download_files()
+
+        # video1.avi should be skipped (no retrbinary call)
+        # video2.avi should be downloaded (retrbinary call)
+
+        # Check that retrbinary was called exactly once for video2.avi
+        self.assertEqual(mock_ftp_instance.retrbinary.call_count, 1)
+        mock_ftp_instance.retrbinary.assert_called_with('RETR video2.avi', mock_file().write)
 
     @patch('builtins.open', new_callable=mock_open)
     @patch('listener.ImplicitFTP_TLS')

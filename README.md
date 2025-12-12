@@ -12,6 +12,7 @@ This is mostly vibe-coded, so beware in general.
 I only own a P1S and have not tested this on anything else.
 
 Enabling deletion prevents the script from redownloading each time but means they are no longer accessible through Bambu Studio or Bambu Handy. You'll have to put the downloads somewhere accessible (e.g. a NAS).
+If `DELETE_AFTER_DOWNLOAD` is set to `false`, the script will still skip files that already exist in the download directory to prevent re-downloading.
 
 
 ## Configuration
@@ -43,5 +44,4 @@ This script is designed to be run with Docker Compose, Portainer, or similar.
 2. Fill out the environment variables as described above.
 
 ## Future Work
-* I'd be nice if the script intelligently checked which files exist in your download directory so it doesn't redownload even if you don't delete off the printer.
 * The filenames are what the printer gives them, which just has a timestamp. Ideally they'd be named better, for instance named after the gcode file, so they'd be easier to identify.

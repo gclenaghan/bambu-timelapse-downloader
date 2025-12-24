@@ -6,6 +6,7 @@ import ssl
 import time
 import logging
 import threading
+import queue
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -55,6 +56,9 @@ class MqttListener:
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.last_gcode_state = None
+        self.download_queue = queue.Queue()
+        self.worker_thread = threading.Thread(target=self._worker, daemon=True)
+        self.worker_thread.start()
 
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
@@ -75,7 +79,8 @@ class MqttListener:
                 # We only care if the gcode_state changes to a final value, since we may get repeated messages
                 # later with the same state and only want to trigger once. We'll also trigger on the first message.
                 if (gcode_state != self.last_gcode_state) and (gcode_state in ["FINISH", "FAILED"]):
-                    threading.Thread(target=self._delayed_download, args=(gcode_state,)).start()
+                    logging.info(f"gcode_state changed to {gcode_state}. Queuing download task.")
+                    self.download_queue.put(gcode_state)
                 else:
                     logging.debug(f"Current gcode_state: {gcode_state}")
                 self.last_gcode_state = gcode_state
@@ -84,9 +89,20 @@ class MqttListener:
         except Exception as e:
             logging.error(f"An error occurred in on_message: {e}")
 
+    def _worker(self):
+        """Worker thread that processes download tasks from the queue."""
+        while True:
+            gcode_state = self.download_queue.get()
+            try:
+                self._delayed_download(gcode_state)
+            except Exception as e:
+                logging.error(f"Error in worker thread: {e}")
+            finally:
+                self.download_queue.task_done()
+
     def _delayed_download(self, gcode_state):
         """Waits for a few seconds and then triggers the file download."""
-        logging.info(f"gcode_state changed to {gcode_state}. Will start download in 10 seconds...")
+        logging.info(f"Starting delayed download for state {gcode_state}. Waiting 10 seconds...")
         time.sleep(10)  # Wait a bit to ensure the printer has finalized the files
         self.download_files()
 

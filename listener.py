@@ -5,6 +5,7 @@ import json
 import ssl
 import time
 import logging
+import threading
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -74,9 +75,7 @@ class MqttListener:
                 # We only care if the gcode_state changes to a final value, since we may get repeated messages
                 # later with the same state and only want to trigger once. We'll also trigger on the first message.
                 if (gcode_state != self.last_gcode_state) and (gcode_state in ["FINISH", "FAILED"]):
-                    logging.info(f"gcode_state changed to {gcode_state}. Will start download in 10 seconds...")
-                    time.sleep(10)  # Wait a bit to ensure the printer has finalized the files
-                    self.download_files()
+                    threading.Thread(target=self._delayed_download, args=(gcode_state,)).start()
                 else:
                     logging.debug(f"Current gcode_state: {gcode_state}")
                 self.last_gcode_state = gcode_state
@@ -84,6 +83,12 @@ class MqttListener:
             logging.warning(f"Received non-JSON message: {msg.payload.decode()}")
         except Exception as e:
             logging.error(f"An error occurred in on_message: {e}")
+
+    def _delayed_download(self, gcode_state):
+        """Waits for a few seconds and then triggers the file download."""
+        logging.info(f"gcode_state changed to {gcode_state}. Will start download in 10 seconds...")
+        time.sleep(10)  # Wait a bit to ensure the printer has finalized the files
+        self.download_files()
 
     def download_files(self):
         """Connects to the FTPS server and downloads all files from the remote directory."""

@@ -46,27 +46,28 @@ class TestMqttListener(unittest.TestCase):
         listener_instance.on_connect(mock_client, None, None, 1, None)
         mock_client.subscribe.assert_not_called()
 
-    @patch('listener.MqttListener.download_files')
+    @patch('listener.queue.Queue')
     @patch('listener.mqtt.Client')
-    def test_on_message_triggers_download(self, mock_mqtt_client, mock_download_files):
+    def test_on_message_triggers_download(self, mock_mqtt_client, mock_queue):
         """Test that on_message triggers download on FINISH or FAILED state."""
         listener_instance = listener.MqttListener()
         mock_client = MagicMock()
+        listener_instance.download_queue = mock_queue.return_value
         
         # Test FINISH state
         finish_payload = json.dumps({"print": {"gcode_state": "FINISH"}}).encode('utf-8')
         finish_msg = MagicMock()
         finish_msg.payload = finish_payload
         listener_instance.on_message(mock_client, None, finish_msg)
-        mock_download_files.assert_called_once()
+        mock_queue.return_value.put.assert_called_once_with("FINISH")
 
         # Test FAILED state
-        mock_download_files.reset_mock()
+        mock_queue.return_value.put.reset_mock()
         failed_payload = json.dumps({"print": {"gcode_state": "FAILED"}}).encode('utf-8')
         failed_msg = MagicMock()
         failed_msg.payload = failed_payload
         listener_instance.on_message(mock_client, None, failed_msg)
-        mock_download_files.assert_called_once()
+        mock_queue.return_value.put.assert_called_once_with("FAILED")
 
     @patch('listener.MqttListener.download_files')
     @patch('listener.mqtt.Client')
@@ -152,12 +153,13 @@ class TestMqttListener(unittest.TestCase):
             self.assertEqual(mock_ftp_instance.retrbinary.call_count, 1)
             mock_ftp_instance.delete.assert_called_once_with('video1.avi')
 
-    @patch('listener.MqttListener.download_files')
+    @patch('listener.queue.Queue')
     @patch('listener.mqtt.Client')
-    def test_on_message_finish_twice_does_not_trigger_download_twice(self, mock_mqtt_client, mock_download_files):
+    def test_on_message_finish_twice_does_not_trigger_download_twice(self, mock_mqtt_client, mock_queue):
         """Test that two consecutive FINISH messages only trigger one download."""
         listener_instance = listener.MqttListener()
         mock_client = MagicMock()
+        listener_instance.download_queue = mock_queue.return_value
         
         finish_payload = json.dumps({"print": {"gcode_state": "FINISH"}}).encode('utf-8')
         finish_msg = MagicMock()
@@ -165,11 +167,21 @@ class TestMqttListener(unittest.TestCase):
 
         # First FINISH message
         listener_instance.on_message(mock_client, None, finish_msg)
-        mock_download_files.assert_called_once()
+        mock_queue.return_value.put.assert_called_once()
 
         # Second FINISH message
         listener_instance.on_message(mock_client, None, finish_msg)
-        mock_download_files.assert_called_once() # Should still be called only once
+        mock_queue.return_value.put.assert_called_once() # Should still be called only once
+
+    @patch('listener.MqttListener.download_files')
+    @patch('listener.time.sleep')
+    def test_delayed_download(self, mock_sleep, mock_download_files):
+        """Test the _delayed_download method."""
+        listener_instance = listener.MqttListener()
+        listener_instance._delayed_download("FINISH")
+
+        mock_sleep.assert_called_once_with(10)
+        mock_download_files.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

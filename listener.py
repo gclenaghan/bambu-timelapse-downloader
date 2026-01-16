@@ -137,6 +137,17 @@ class MqttListener:
                             logging.info(f"Deleting {filename} from the printer...")
                             ftp.delete(filename)
                             logging.info(f"Deleted {filename} from the printer.")
+
+                            # Also delete the thumbnail
+                            thumbnail_filename = f"thumbnail/{os.path.splitext(filename)[0]}.jpg"
+                            try:
+                                logging.info(f"Deleting thumbnail {thumbnail_filename} from the printer...")
+                                ftp.delete(thumbnail_filename)
+                                logging.info(f"Deleted {thumbnail_filename} from the printer.")
+                            except Exception as e:
+                                # It's possible the thumbnail doesn't exist, so we just log the error and move on
+                                logging.warning(f"Could not delete thumbnail {thumbnail_filename}: {e}")
+
                         except Exception as e:
                             logging.error(f"An error occurred while deleting {filename}: {e}")
 

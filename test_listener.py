@@ -151,7 +151,27 @@ class TestMqttListener(unittest.TestCase):
             listener_instance.download_files()
 
             self.assertEqual(mock_ftp_instance.retrbinary.call_count, 1)
-            mock_ftp_instance.delete.assert_called_once_with('video1.avi')
+            mock_ftp_instance.delete.assert_any_call('video1.avi')
+            mock_ftp_instance.delete.assert_any_call('thumbnail/video1.jpg')
+
+    @patch('builtins.open', new_callable=mock_open)
+    @patch('listener.ImplicitFTP_TLS')
+    @patch('listener.mqtt.Client')
+    def test_download_files_and_delete_with_thumbnails(self, mock_mqtt_client, mock_ftp_tls, mock_file):
+        """Test that thumbnails are also deleted when deleting video files."""
+        with patch.dict(listener.__dict__, {'DELETE_AFTER_DOWNLOAD': True}):
+            listener_instance = listener.MqttListener()
+            mock_ftp_instance = MagicMock()
+            mock_ftp_tls.return_value.__enter__.return_value = mock_ftp_instance
+            mock_ftp_instance.nlst.return_value = ['video1.avi']
+
+            listener_instance.download_files()
+
+            self.assertEqual(mock_ftp_instance.retrbinary.call_count, 1)
+            # Expect deletion of video and thumbnail
+            mock_ftp_instance.delete.assert_any_call('video1.avi')
+            mock_ftp_instance.delete.assert_any_call('thumbnail/video1.jpg')
+            self.assertEqual(mock_ftp_instance.delete.call_count, 2)
 
     @patch('listener.queue.Queue')
     @patch('listener.mqtt.Client')

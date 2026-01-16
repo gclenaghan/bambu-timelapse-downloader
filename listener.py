@@ -72,9 +72,9 @@ class MqttListener:
     def on_message(self, client, userdata, msg):
         """Callback for when a message is received from the MQTT broker."""
         try:
-            data = json.loads(msg.payload.decode())
+            data = json.loads(msg.payload)
             if "print" in data and "gcode_state" in data["print"]:
-                logging.debug(f"Received message: {data}")
+                logging.debug("Received message: %s", data)
                 gcode_state = data["print"]["gcode_state"]
                 # We only care if the gcode_state changes to a final value, since we may get repeated messages
                 # later with the same state and only want to trigger once. We'll also trigger on the first message.
@@ -82,7 +82,7 @@ class MqttListener:
                     logging.info(f"gcode_state changed to {gcode_state}. Queuing download task.")
                     self.download_queue.put(gcode_state)
                 else:
-                    logging.debug(f"Current gcode_state: {gcode_state}")
+                    logging.debug("Current gcode_state: %s", gcode_state)
                 self.last_gcode_state = gcode_state
         except json.JSONDecodeError:
             logging.warning(f"Received non-JSON message: {msg.payload.decode()}")

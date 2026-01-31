@@ -1,9 +1,14 @@
 services:
   bambu-timelapse-downloader:
-    build: .
+    image: ghcr.io/gclenaghan/bambu-timelapse-downloader:latest
     container_name: bambu-timelapse-downloader
     restart: unless-stopped
-    env_file:
-      - stack.env
+    env:
+      # Required Configuration:
+      # PRINTER_IP=
+      # ACCESS_CODE=
+      # SERIAL_NUMBER=
+      # DELETE_AFTER_DOWNLOAD=
+      # DOWNLOADS_HOST_PATH=
     volumes:
       - ${DOWNLOADS_HOST_PATH}:/downloads

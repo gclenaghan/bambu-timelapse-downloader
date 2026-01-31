@@ -22,23 +22,18 @@ I only own a P1S and have not tested this on anything else.
 
 ## Usage
 
-This script is designed to be run with Docker Compose, Portainer, or similar.
+This script is designed to be run with Docker Compose.
 
 ### Docker Compose
 
-1.  Make sure you have Docker and Docker Compose installed.
-2.  Copy `stack.env.example` to `stack.env`.
-3.  Edit `stack.env` with configuration described above.
-4.  Run the following command to start the downloader:
+1.  Add required configuration environment variables
+2.  Run the following command to start the downloader:
 
     ```bash
     docker-compose up -d
     ```
 
-### Portainer
-
-1. Create a stack and select Repository with this repo.
-2. Fill out the environment variables as described above.
+The `docker-compose.yml` is configured to pull the latest image from the GitHub Container Registry.
 
 ## Future Work
 * The filenames are what the printer gives them, which just has a timestamp. Ideally they'd be named better, for instance named after the gcode file, so they'd be easier to identify.

@@ -215,17 +215,17 @@ class MqttListener:
             try:
                 logging.info(f"Connecting to FTPS server at {PRINTER_IP}...")
                 ftp.connect(PRINTER_IP, port=990)
-                logging.info("Logging in to FTPS server...")
+                logging.debug("Logging in to FTPS server...")
                 login_resp = ftp.login("bblp", ACCESS_CODE)
-                logging.info(f"FTPS login response: {login_resp}")
-                logging.info("Securing data channel (PBSZ/PROT)...")
+                logging.debug(f"FTPS login response: {login_resp}")
+                logging.debug("Securing data channel (PBSZ/PROT)...")
                 prot_resp = ftp.prot_p()
-                logging.info(f"PROT response: {prot_resp}")
-                logging.info("Changing to timelapse directory...")
+                logging.debug(f"PROT response: {prot_resp}")
+                logging.debug("Changing to timelapse directory...")
                 cwd_resp = ftp.cwd("timelapse")
-                logging.info(f"CWD response: {cwd_resp}")
+                logging.debug(f"CWD response: {cwd_resp}")
                 try:
-                    logging.info(f"Server reports current directory as: {ftp.pwd()}")
+                    logging.debug(f"Server reports current directory as: {ftp.pwd()}")
                 except Exception as e:
                     logging.warning(f"Could not PWD: {e}")
 

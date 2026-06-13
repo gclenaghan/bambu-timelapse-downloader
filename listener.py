@@ -25,9 +25,25 @@ except KeyError as e:
     logging.error(f"Error: Environment variable {e} is not set. Please set it and restart the script.")
     exit(1)
 
+def _create_ftp_ssl_context():
+    """
+    Create an SSL context compatible with the Bambu printer's FTPS server.
+
+    The Bambu printer's FTP server requires TLS session reuse on the data
+    channel. We keep the context permissive (no cert verification) to match
+    the existing setup, and rely on the ImplicitFTP_TLS subclass to share the
+    control socket's TLS session with the data socket.
+    """
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 class ImplicitFTP_TLS(ftplib.FTP_TLS):
     """
-    FTP_TLS subclass that automatically wraps sockets in SSL to support implicit FTPS.
+    FTP_TLS subclass that automatically wraps sockets in SSL to support implicit FTPS,
+    and explicitly reuses the control socket's TLS session on data connections.
     From https://stackoverflow.com/a/36049814
     """
 
@@ -46,6 +62,34 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
         if value is not None and not isinstance(value, ssl.SSLSocket):
             value = self.context.wrap_socket(value)
         self._sock = value
+
+    def ntransfercmd(self, cmd, rest=None):
+        """Override to ensure the data socket reuses the control's TLS session.
+
+        The Bambu printer's FTP server returns 522 "SSL connection failed:
+        session reuse required" when the data channel does not resume the
+        TLS session established on the control channel.
+
+        We deliberately call ftplib.FTP.ntransfercmd (not FTP_TLS) to get
+        back a plain, un-wrapped data socket. The stdlib's FTP_TLS override
+        would already wrap it for us, but without the session= argument the
+        Bambu server rejects the data connection. We then perform the wrap
+        ourselves, passing session= when a resumable session ID is
+        available.
+        """
+        conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
+        if self._prot_p and isinstance(self.sock, ssl.SSLSocket):
+            try:
+                host = self.sock.getpeername()[0]
+                kwargs = {"server_hostname": host}
+                sess = self.sock.session
+                if sess is not None and sess.id:
+                    kwargs["session"] = sess
+                conn = self.context.wrap_socket(conn, **kwargs)
+            except Exception:
+                conn.close()
+                raise
+        return conn, size
 
 class MqttListener:
     def __init__(self):
@@ -106,21 +150,95 @@ class MqttListener:
         time.sleep(10)  # Wait a bit to ensure the printer has finalized the files
         self.download_files()
 
+    @staticmethod
+    def _list_timelapse_files(ftp):
+        """List timelapse video files in the current FTPS directory.
+
+        Bambu printers have switched over time from producing .avi timelapses
+        to .mp4. We accept both so the downloader works regardless of firmware
+        version.
+
+        Tries MLSD first (machine-readable, most reliable) and falls back to
+        a plain LIST, taking the trailing whitespace-trimmed name from each
+        line. Returns an empty list if both strategies yield nothing.
+        """
+        filenames = []
+
+        # --- Strategy 1: MLSD ---
+        try:
+            logging.info("Listing directory with MLSD...")
+            mlsd_entries = []
+            ftp.retrlines("MLSD", mlsd_entries.append)
+            logging.info(f"MLSD returned {len(mlsd_entries)} entries")
+            for entry in mlsd_entries:
+                # MLSD lines look like: "modify=20240101000000;type=file;size=1234; myvideo.avi"
+                parts = entry.split(" ", 1)
+                if len(parts) != 2:
+                    continue
+                facts, name = parts
+                name = name.strip()
+                if not name or name in (".", ".."):
+                    continue
+                # Skip directories (type=dir). The fact string contains the
+                # file type.
+                if "type=dir" in facts:
+                    continue
+                if name.lower().endswith((".avi", ".mp4")):
+                    filenames.append(name)
+        except Exception as e:
+            logging.warning(f"MLSD listing failed: {e}")
+
+        if filenames:
+            return filenames
+
+        # --- Strategy 2: LIST (fallback) ---
+        try:
+            logging.info("Listing directory with LIST (fallback)...")
+            list_entries = []
+            ftp.retrlines("LIST", list_entries.append)
+            logging.info(f"LIST returned {len(list_entries)} entries")
+            for line in list_entries:
+                # Typical Unix-style LIST:
+                #   "-rw-r--r--  1 owner group 1234 Jan 01 12:00 myvideo.mp4"
+                name = line.split(maxsplit=8)[-1].strip()
+                if name.lower().endswith((".avi", ".mp4")):
+                    filenames.append(name)
+        except Exception as e:
+            logging.warning(f"LIST listing failed: {e}")
+
+        return filenames
+
     def download_files(self):
         """Connects to the FTPS server and downloads all files from the remote directory."""
         try:
-            with ImplicitFTP_TLS() as ftp:
+            ftp = ImplicitFTP_TLS(context=_create_ftp_ssl_context())
+            try:
                 logging.info(f"Connecting to FTPS server at {PRINTER_IP}...")
-                logging.debug(ftp.connect(PRINTER_IP, port=990))
-                logging.debug("Logging in...")
-                logging.debug(ftp.login("bblp", ACCESS_CODE))
-                logging.debug("Securing connection...")
-                logging.debug(ftp.prot_p())
-                logging.debug("Opening timelapse directory...")
-                logging.debug(ftp.cwd("timelapse"))
+                ftp.connect(PRINTER_IP, port=990)
+                logging.info("Logging in to FTPS server...")
+                login_resp = ftp.login("bblp", ACCESS_CODE)
+                logging.info(f"FTPS login response: {login_resp}")
+                logging.info("Securing data channel (PBSZ/PROT)...")
+                prot_resp = ftp.prot_p()
+                logging.info(f"PROT response: {prot_resp}")
+                logging.info("Changing to timelapse directory...")
+                cwd_resp = ftp.cwd("timelapse")
+                logging.info(f"CWD response: {cwd_resp}")
+                try:
+                    logging.info(f"Server reports current directory as: {ftp.pwd()}")
+                except Exception as e:
+                    logging.warning(f"Could not PWD: {e}")
 
-                filenames = [filename for filename in ftp.nlst() if filename.endswith(".avi")]
+                # MLSD first, LIST fallback. If both yield nothing, also log
+                # the raw LIST output for diagnosis.
+                filenames = self._list_timelapse_files(ftp)
                 logging.info(f"Found {len(filenames)} files to download.")
+                if not filenames:
+                    try:
+                        logging.info("Raw directory listing for diagnosis:")
+                        ftp.retrlines("LIST", lambda line: logging.info(f"  {line}"))
+                    except Exception as e:
+                        logging.warning(f"Could not retrieve raw LIST for diagnosis: {e}")
 
                 for filename in filenames:
                     local_filepath = os.path.join(DOWNLOAD_DIR, filename)
@@ -152,6 +270,11 @@ class MqttListener:
                             logging.error(f"An error occurred while deleting {filename}: {e}")
 
                 logging.info("All files downloaded successfully.")
+            finally:
+                try:
+                    ftp.quit()
+                except Exception:
+                    pass
 
         except Exception as e:
             logging.error(f"An error occurred during the FTPS process: {e}")
